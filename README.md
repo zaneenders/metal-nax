@@ -16,15 +16,21 @@ You don't write raw NAX assembly. You write high-level **Metal Performance Primi
 
 ```
 metal-nax/
-├── build/                  # Build artifacts (ignored by git)
-│   ├── nax_demo            # Runnable binary
-│   ├── nax_shader.air      # Compiled shader IR
-│   └── nax_shader.metallib # Compiled shader library
-├── nax_shader.metal        # Metal 4 compute kernels
-├── NAXHost.swift           # Swift host code (pipeline, dispatch)
-├── .gitignore              # Ignores build/ and macOS noise
-└── README.md               # This file
+├── Package.swift
+├── Plugins/
+│   └── NAXMetalPlugin/          # Build plugin: metal → .air → .metallib
+├── Sources/
+│   ├── NAXShaders/
+│   │   ├── Shaders/
+│   │   │   └── nax_shader.metal # Metal 4 compute kernels (compiled by plugin)
+│   │   └── NAXShaderLibrary.swift
+│   └── NAXDemo/
+│       ├── NAXContext.swift     # Swift host code (pipeline, dispatch)
+│       └── main.swift
+└── README.md
 ```
+
+Metal shaders live under `Sources/NAXShaders/Shaders/` and are excluded from SwiftPM's default Metal build. The **NAXMetalPlugin** build tool compiles them with `xcrun metal` and links them into `nax_shader.metallib`, which is bundled into the `NAXShaders` module and loaded via `Bundle.module`.
 
 ## Quick Start
 
@@ -36,26 +42,23 @@ Make sure Xcode is your active developer directory:
 sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 ```
 
-Then compile everything:
+Then build and run with Swift Package Manager:
 
 ```bash
-mkdir -p build
-
-# Compile the Metal shader
-xcrun -sdk macosx metal -c nax_shader.metal -o build/nax_shader.air
-xcrun -sdk macosx metallib build/nax_shader.air -o build/nax_shader.metallib
-
-# Compile the Swift host in release mode
-swiftc -O -framework Metal -framework MetalPerformanceShaders NAXHost.swift -o build/nax_demo
+swift build -c release
+swift run -c release nax-demo
 ```
+
+The executable links against **Metal** and **MetalPerformanceShaders** via `unsafeFlags` in `Package.swift` (required because those frameworks aren't exposed as SPM dependencies).
 
 ### 2. Run
 
 ```bash
-./build/nax_demo
+swift run -c release nax-demo
 ```
 
-Output:
+Expected output:
+
 ```
 Device: Apple M5
 Supports NAX (Metal 4): true
@@ -64,11 +67,20 @@ NAX kernel completed: 128x64 output computed.
 
 ### 3. Rebuild
 
-After changing shader or host code, just rerun the build steps above. The binary is self-contained — it loads `build/nax_shader.metallib` at runtime.
+After changing shader or host code, rerun `swift build`. The build plugin recompiles `.metal` files only when they change.
 
 ---
 
 ## How It Works
+
+### Build plugin
+
+`NAXMetalPlugin` runs as part of the `NAXShaders` target build:
+
+1. `xcrun -sdk macosx metal -c Shaders/nax_shader.metal -o nax_shader.air`
+2. `xcrun -sdk macosx metallib nax_shader.air -o nax_shader.metallib`
+
+The resulting `.metallib` is copied into the `NAXShaders` resource bundle and exposed through `NAXShaderLibrary.metallibURL`.
 
 ### Shader: `naxFusedMatmulBiasRelu`
 
@@ -122,4 +134,3 @@ let threadgroups = MTLSize(
 3. **Fuse everything in registers** with cooperative tensors. Every round-trip to device memory costs bandwidth and latency.
 4. **Tile sizes matter** — 64×32 with 4 SIMD groups is a good starting point for M5, but profile your actual shapes.
 5. **Use `static_slice` for known bounds** — If K is fixed at compile time, replace `dynamic_extent` to skip runtime bounds checks.
-
