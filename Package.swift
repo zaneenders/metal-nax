@@ -1,36 +1,19 @@
-// swift-tools-version: 6.2
-
+// swift-tools-version: 6.4
 import PackageDescription
 
 let package = Package(
-    name: "NAXDemo",
-    platforms: [
-        .macOS(.v26),
-    ],
-    products: [
-        .executable(name: "nax-demo", targets: ["NAXDemo"]),
-    ],
+    name: "HelloTriangle",
+    platforms: [.macOS(.v14)],
     targets: [
         .executableTarget(
-            name: "NAXDemo",
-            dependencies: ["NAXShaders"],
+            name: "HelloTriangle",
             linkerSettings: [
-                .unsafeFlags(
-                    ["-framework", "Metal", "-framework", "MetalPerformanceShaders"],
-                    .when(platforms: [.macOS])
-                ),
+                .unsafeFlags([
+                    "-framework", "Metal",
+                    "-framework", "MetalKit",
+                    "-framework", "AppKit",
+                ])
             ]
-        ),
-        .target(
-            name: "NAXShaders",
-            exclude: ["Shaders"],
-            plugins: [
-                .plugin(name: "NAXMetalPlugin"),
-            ]
-        ),
-        .plugin(
-            name: "NAXMetalPlugin",
-            capability: .buildTool()
-        ),
+        )
     ]
 )
