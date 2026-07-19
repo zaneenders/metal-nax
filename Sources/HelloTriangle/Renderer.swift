@@ -14,9 +14,15 @@ let metalSource = """
       float3 color;
     };
 
-    vertex VertexOut vertex_main(uint vid [[vertex_id]], constant Vertex* vertices [[buffer(0)]]) {
+    struct Uniforms {
+      float4x4 modelMatrix;
+    };
+
+    vertex VertexOut vertex_main(uint vid [[vertex_id]],
+                                 constant Vertex* vertices [[buffer(0)]],
+                                 constant Uniforms& uniforms [[buffer(1)]]) {
         VertexOut out;
-        out.position = float4(vertices[vid].position, 0.0, 1.0);
+        out.position = uniforms.modelMatrix * float4(vertices[vid].position, 0.0, 1.0);
         out.color = vertices[vid].color;
         return out;
     }
@@ -31,16 +37,29 @@ struct Vertex {
     var color: SIMD3<Float>
 }
 
+struct Uniforms {
+    var modelMatrix: simd_float4x4
+}
+
 @MainActor
 final class Renderer: NSObject, MTKViewDelegate {
     private let pipeline: MTLRenderPipelineState
     private let queue: MTLCommandQueue
     private let vertexBuffer: MTLBuffer
+    private let uniformBuffer: MTLBuffer
+
+    var rotation: Float = 0
+    var offsetX: Float = 0
+    var offsetY: Float = 0
 
     init?(view: MTKView) {
         guard let device = view.device,
             let queue = device.makeCommandQueue()
-        else { return nil }
+        else {
+            print("Unable to make command queue.")
+            return nil
+        }
+        self.queue = queue
 
         let library: MTLLibrary
         do {
@@ -72,7 +91,14 @@ final class Renderer: NSObject, MTKViewDelegate {
         }
         self.vertexBuffer = vertexBuffer
 
-        self.queue = queue
+        guard
+            let uniformBuffer = device.makeBuffer(
+                length: MemoryLayout<Uniforms>.stride,
+                options: .storageModeShared)
+        else {
+            return nil
+        }
+        self.uniformBuffer = uniformBuffer
 
         let desc = MTLRenderPipelineDescriptor()
         desc.vertexFunction = vertex
@@ -93,8 +119,28 @@ final class Renderer: NSObject, MTKViewDelegate {
             let cmd = queue.makeCommandBuffer(),
             let enc = cmd.makeRenderCommandEncoder(descriptor: rpd)
         else { return }
+
+        let cosA = cos(rotation)
+        let sinA = sin(rotation)
+        let rotate = simd_float4x4(rows: [
+            [cosA, -sinA, 0, 0],
+            [sinA, cosA, 0, 0],
+            [0, 0, 1, 0],
+            [0, 0, 0, 1],
+        ])
+        let translate = simd_float4x4(rows: [
+            [1, 0, 0, offsetX],
+            [0, 1, 0, offsetY],
+            [0, 0, 1, 0],
+            [0, 0, 0, 1],
+        ])
+        var uniforms = Uniforms(modelMatrix: translate * rotate)
+        uniformBuffer.contents().copyMemory(
+            from: &uniforms, byteCount: MemoryLayout<Uniforms>.stride)
+
         enc.setRenderPipelineState(pipeline)
         enc.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
+        enc.setVertexBuffer(uniformBuffer, offset: 0, index: 1)
         enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         enc.endEncoding()
         cmd.present(drawable)

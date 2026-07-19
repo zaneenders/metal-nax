@@ -4,6 +4,15 @@ import MetalKit
 
 @main
 struct HelloTriangle {
+    private enum Key: UInt16 {
+        case a = 0
+        case s = 1
+        case d = 2
+        case w = 13
+        case q = 12
+        case e = 14
+    }
+
     public static func main() {
         let app = NSApplication.shared
         app.setActivationPolicy(.regular)
@@ -27,6 +36,33 @@ struct HelloTriangle {
         window.contentView = view
         window.center()
         window.makeKeyAndOrderFront(nil)
+
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            let handled: Bool
+            switch Key(rawValue: event.keyCode) {
+            case .w:
+                renderer.offsetY += 0.05
+                handled = true
+            case .s:
+                renderer.offsetY -= 0.05
+                handled = true
+            case .a:
+                renderer.offsetX -= 0.05
+                handled = true
+            case .d:
+                renderer.offsetX += 0.05
+                handled = true
+            case .q:
+                renderer.rotation += 0.05
+                handled = true
+            case .e:
+                renderer.rotation -= 0.05
+                handled = true
+            default:
+                handled = false
+            }
+            return handled ? nil : event
+        }
 
         app.activate(ignoringOtherApps: true)
         app.run()
