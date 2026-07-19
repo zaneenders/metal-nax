@@ -9,12 +9,20 @@ let metalSource = """
       float3 color;
     };
 
-    vertex float4 vertex_main(uint vid [[vertex_id]], constant Vertex* vertices [[buffer(0)]]) {
-        return float4(vertices[vid].position, 0.0, 1.0);
+    struct VertexOut {
+      float4 position [[position]];
+      float3 color;
+    };
+
+    vertex VertexOut vertex_main(uint vid [[vertex_id]], constant Vertex* vertices [[buffer(0)]]) {
+        VertexOut out;
+        out.position = float4(vertices[vid].position, 0.0, 1.0);
+        out.color = vertices[vid].color;
+        return out;
     }
 
-    fragment float4 fragment_main() {
-        return float4(1.0, 0.0, 0.0, 1.0);
+    fragment float4 fragment_main(VertexOut in [[stage_in]]) {
+        return float4(in.color, 1.0);
     }
     """
 
